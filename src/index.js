@@ -4,26 +4,39 @@ const Stream = require('stream').Duplex;
 
 const BUFFER_SIZE = 1000;
 
-const arrayToSortedBuffer = array => {
-    const buffer = Buffer.allocUnsafe(array.length * 4);
-    array.sort((a, b) => a - b).forEach((n, i) => buffer.writeInt32BE(n, i * 4));
-    return {
-        offset: 4,
-        buffer,
-        head: buffer.readInt32BE(0)
-    };
+const merge = (buffer, array) => {
+    const result = Buffer.allocUnsafe(buffer.length + array.length * 4);
+    let i = 0, j = 0, offset = 0;
+    while (i < buffer.length || j < array.length) {
+        if (i >= buffer.length || buffer.readInt32BE(i) > array[j]) {
+            offset = result.writeInt32BE(array[j], offset);
+            j += 1;
+        } else {
+            offset = result.writeInt32BE(buffer.readInt32BE(i), offset);
+            i += 4;
+        }
+    }
+    return result;
 };
 
-const sort = (fileName) => {
-    const buffers = [];
-    let array = [];
+const bufferToArray = buffer => {
+    const array = [];
+    for(let offset = 0; offset < buffer.length; offset += 4) {
+        array.push(buffer.readInt32BE(offset));
+    }
+    return array;
+}
 
+const sort = (fileName) => {
+    let buffer = Buffer.allocUnsafe(0);
+    let array = [];
+ 
     const out = new Stream({
         read() {},
         write(chunk, encoding, callback) {
             array.push(parseInt(chunk.toString(), 10));
             if (array.length >= BUFFER_SIZE) {
-                buffers.push(arrayToSortedBuffer(array));
+                buffer = merge(buffer, array.sort((a,b) => a - b));
                 array = [];
             }
             callback();
@@ -32,28 +45,11 @@ const sort = (fileName) => {
 
     out.on('finish', () => {
         if (array.length) {
-            buffers.push(arrayToSortedBuffer(array));
+            buffer = merge(buffer, array.sort((a,b) => a - b));
         }
-        while(true) {
-            let minN = Number.MAX_VALUE;
-            const index = buffers.reduce((minIndex, {head}, i) => {
-                if (head !== null && head < minN) {
-                    minN = head;
-                    return i;
-                }
-                return minIndex;
-            }, Number.MAX_VALUE);
-            if (index === Number.MAX_VALUE) {
-                out.end();
-                return;
-            }
-            out.push(minN + '\n');
-            const {offset, buffer} = buffers[index];
-            buffers[index] = offset >= buffer.length ? 
-                {head: null} :
-                {offset: offset + 4, buffer, head: buffer.readInt32BE(offset)};
+        for(let i=0; i<buffer.length; i+=4) {
+            out.push(buffer.readInt32BE(i) + '\n');
         }
-
     });
 
     const rl = readline.createInterface({

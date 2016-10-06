@@ -1,0 +1,16 @@
+{
+  "name": "sort",
+  "description": "sorting investigation in node",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andysprout/sort.git"
+  },
+  "devDependencies": {
+    "eslint": "^3.7.1",
+    "tape": "^4.6.2"
+  }
+}
